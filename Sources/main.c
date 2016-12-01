@@ -13,6 +13,8 @@
 #define TRIS_BUS PTEDD
 #define TRIS_LOAD PTGDD_PTGDD0
 #define LOAD PTGD_PTGD0
+#define TRIS_CON PTGDD_PTGDD1
+#define CON PTGD_PTGD1
 
 //Preprocessor directives {commands used for the controller of GLCD} 
 
@@ -71,40 +73,44 @@ void main(void) {
 		Vrms = sampling_sin(1); // Function to obtain the RMS value of the voltage
 		Irms = sampling_sin(2); // Function to obtain the RMS value of the current
 		sampling_pf(); // Function to measure the time on of the MCU
-		//Vrms = Vrms;
-		Irms =Irms*3.84;
+		Vrms = Vrms*25.5*2.51;
+		Irms =Irms*100;
 		//PF=(30*3.141)/180;
 		cosT=cosf((PF*3.1416/180));  // Power Factor
-		sinT=sinf(PF); // Sin(theta[V]-theta[I])
+		sinT=sinf((PF*3.1416/180)); // Sin(theta[V]-theta[I])
 		Pcom = Vrms * Irms; // Complex power
 		Pact = (Pcom * cosT); // Active power
 		Prea = (Pcom * sinT); // Reactive power		 
 		 
+		
 		sprintf(temp,"%3.2f",Vrms);		
 		temp[5]='\0'; // sure the end of the array
-		glcd_instruction(cmd_line2); // Setting cursor at second line
+		glcd_instruction(cmd_line3); // Setting cursor at second line+    
 		glcd_message("v=");
 		glcd_message(temp);	
 		glcd_message("V ");
 		
-		sprintf(temp,"%3.2f",Irms);		
-		temp[5]='\0'; // sure the end of the array
-		glcd_message("i=");
-		glcd_message(temp);
-		glcd_message("A ");
-		
-		glcd_instruction(cmd_line3); // Setting cursor at second line
-		sprintf(temp,"%6.2f",Pact);		
+		//glcd_instruction(cmd_line3); // Setting cursor at second line
+		sprintf(temp,"%6.2f",Irms);		
 		temp[5]='\0'; // sure the      end of the array
-		glcd_message("P=");
+		//glcd_message("P=");
 		glcd_message(temp);
-		glcd_message("W ");
+//		glcd_message("W ");
 		
-		sprintf(temp,"%3.1f",Prea);		
+		
+		glcd_instruction(cmd_line2);
+		sprintf(temp,"%6.2f",PF);		
+		temp[5]='\0'; // sure the end of the array
+		glcd_message("Alfa=");
+		glcd_message(temp);
+		glcd_message("Grados");
+		
+
+		/*sprintf(temp,"%3.1f",Prea);		
 		temp[5]='\0'; // sure the end of the array
 		glcd_message("Q=");
 		glcd_message(temp);
-		glcd_message("Va");
+		glcd_message("Va");*/
 		
 		glcd_instruction(cmd_line4+2); // Setting cursor at second line
 		sprintf(temp,"%6.4f",cosT);		
@@ -117,7 +123,7 @@ void main(void) {
 
 
 void init_IRQ(void){  /* Function to initialize the IRQ*/
-   IRQSC=0b01110100 ; // ACK clearing flag 01110100B
+   IRQSC=0b01110100 ; // ACK clearing flag 01110100B // ACK BIT 2  , FLAG BIT 3
        // Description:  Not enabling interrupt, pin enable, + Edge, Mode 0 
 }
 
@@ -235,7 +241,20 @@ float sampling_sin(unsigned char channel){
 
 void sampling_pf(){
 	//asm{BIL *}
-	TRIS_LOAD = 1;
+	TRIS_LOAD = 1; // LOAD
+	// CARGA APAGADA
+	TRIS_CON = 0; // INPUT CONTROL BUTTON
+	if(!CON){
+		flag++;
+		flag=flag & 1; // mask
+		if (flag==0){
+			LOAD=1;
+		}
+		else {
+			LOAD=0;
+		}
+	}
+	
 	TPM1SC = 0b00000010; //Temporizador programado para medir y actualizar medidas cada 0.5s
 	TPM1MOD = 31250;
 	TPM1SC_CLKSA = 0; // Start Clock
@@ -249,13 +268,13 @@ void sampling_pf(){
 	Duty_cycle[7]=0;
 	Duty_cycle[8]=0;
 	while(i<7){
-	// while(TPM1SC_TOF == 0);
-	 //TPM1SC_TOF = 0;
+     IRQSC=0b01110100 ; // ACK clearing flag 01110100B // ACK BIT 2  , FLAG BIT 3 // RISING EDGE 
 	 TPM1CNT=0;
+	 while(!IRQSC_IRQF); // Waiting for rising edge 
 	 TPM1SC_CLKSA = 1;
-	 //asm("H: BIL H")
-	 //asm("L: BIH L")
-	 delayAx5ms(1);
+	 IRQSC=0b01010100 ; // ACK clearing flag 01110100B // ACK BIT 2  , FLAG BIT 3 // RISING EDGE
+	 while(!IRQSC_IRQF); // Waiting for FALLING edge 
+	 //delayAx5ms(1);
 	 Duty_cycle[i]=TPM1CNT;
 	 TPM1SC_CLKSA = 0;
 	 /*
@@ -273,7 +292,8 @@ void sampling_pf(){
 	 i++;
 	}
 	 PF=(Duty_cycle[1]+Duty_cycle[2]+Duty_cycle[3]+Duty_cycle[4]+Duty_cycle[5])/5;
-	 PF*=0.0108;// Conversion to degrees	
+	 PF=PF/106;// Conversion to degrees	
+	 
 }
 
 void delayAx5ms(unsigned char var_delay){  // Process To delay creation *DEVELOPED BY JULIAN SANTOS*
